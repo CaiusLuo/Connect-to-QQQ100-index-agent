@@ -6,24 +6,41 @@
 # --- 任务 1: 获取和初步分析纳指数据 ---
 fetch_and_analyze_data:
   description: >
-    使用 'nasdaq_data_tool' 工具获取纳斯达克100指数（QQQ）在过去一个交易日的
-    收盘价、开盘价、成交量以及具体的百分比涨跌幅。
+    【重要】你必须首先调用 'nasdaq_data_tool' 工具来获取纳斯达克100指数（QQQ）
+    的真实市场数据。禁止编造或猜测任何数据！
 
-    分析并判断市场是处于上涨、下跌还是窄幅震荡状态。
+    步骤：
+    1. 调用 nasdaq_data_tool 工具获取真实数据
+    2. 从工具返回的结果中提取：最新收盘价、涨跌额、涨跌幅
+    3. 基于这些真实数据进行分析，判断市场状态
+
+    注意：所有数据必须来自工具的返回结果，不允许自己编造！
 
   expected_output: >
-    一份简洁的 JSON 格式输出，包含以下字段：
+    一份基于真实数据的 JSON 格式报告，必须包含以下字段：
     {
       "index": "NASDAQ 100 (QQQ)",
-      "latest_close": 0.00,  # 确保是两位小数
-      "percentage_change": 0.00, # 确保是两位小数，例如 -1.58
-      "volume": 0,
-      "market_assessment": "例如：当日市场表现强劲，突破了关键阻力位。"
+      "data_source": "nasdaq_data_tool 工具返回的原始数据",
+      "latest_close": <从工具获取的真实收盘价，保留两位小数>,
+      "price_change": <从工具获取的真实涨跌额，保留两位小数>,
+      "percentage_change": <从工具获取的真实涨跌幅，保留两位小数>,
+      "market_assessment": "<基于上述真实数据的简短分析，必须引用具体数字>"
     }
-    **严格确保输出是有效的 JSON 格式，以便下一个 Agent 读取。**
 
-  agent_role: market_analyst # 明确指派给 'market_analyst' 执行
-  tools: [nasdaq_data_tool] # 明确使用你定义的金融工具
+    示例（市场下跌情况）：
+    {
+      "index": "NASDAQ 100 (QQQ)",
+      "data_source": "最新价: 518.23, 涨跌额: -7.85, 涨跌幅: -1.49%",
+      "latest_close": 518.23,
+      "price_change": -7.85,
+      "percentage_change": -1.49,
+      "market_assessment": "今日QQQ收于518.23点，下跌7.85点（-1.49%），市场呈现明显回调态势。"
+    }
+
+    **严格要求：market_assessment 中必须包含具体的数字，不允许出现模糊描述！**
+
+  agent_role: market_analyst
+  tools: [nasdaq_data_tool]
 
 # --- 任务 2: 搜索当日重要财经新闻 ---
 research_key_news:

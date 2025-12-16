@@ -3,6 +3,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
 ![CrewAI](https://img.shields.io/badge/Agent-CrewAI-orange?logo=robot)
+![FastAPI](https://img.shields.io/badge/API-FastAPI-green?logo=fastapi)
 ![Package Manager](https://img.shields.io/badge/Manager-uv-purple?logo=rust)
 
 ## 🌟 项目简介 (What is this?)
@@ -23,7 +24,7 @@
 
 ```mermaid
 graph TD
-    Start[⏰ 每日触发] --> |启动| Crew[👥 CrewAI Manager]
+    Start[⏰ 每日触发 / API 调用] --> |启动| Crew[👥 CrewAI Manager]
     
     subgraph Team [✨ 核心团队]
         Crew --> |Step 1| Analyst[📊 Market Analyst]
@@ -54,9 +55,12 @@ graph TD
 
 - **[CrewAI](https://github.com/joaomdmoura/crewai)**: `^1.7.0` - 多 Agent 协同框架
 - **[LangChain](https://github.com/langchain-ai/langchain)**: `^0.4.1` - 大模型应用开发框架
-- **[FastAPI](https://fastapi.tiangolo.com/)**: `^0.124.4` -要把 Agent 能力暴露为 API 时使用
+- **[FastAPI](https://fastapi.tiangolo.com/)**: `^0.124.4` - 提供 RESTful API 接口
+- **[Uvicorn](https://www.uvicorn.org/)**: `^0.30.0` - 高性能 ASGI 服务器
 - **[yfinance](https://github.com/ranaroussi/yfinance)**: `^0.2.66` - 雅虎财经数据获取
-- **[Ruff](https://docs.astral.sh/ruff/)**: `^0.14.9` (Dev) - 极速 Python 代码在 Linting 和 Formatting 工具
+- **[Ruff](https://docs.astral.sh/ruff/)**: `^0.14.9` (Dev) - 极速 Python 代码 Linting 和 Formatting 工具
+
+> 💡 **Windows 用户注意**：本项目已内置 Windows 信号兼容性修复，解决了 CrewAI 在 Windows 上运行时的 `AttributeError: module 'signal' has no attribute 'SIGHUP'` 问题。
 
 ---
 
@@ -71,26 +75,56 @@ cd Connect-to-QQQ100-index-agent
 ```
 
 ### 2. 安装依赖 (使用 uv)
-不需要漫长的等待，`uv` 会搞定一切环境问题：( `npm` 用户表示羡慕 )
+不需要漫长的等待，`uv` 会搞定一切环境问题：
 ```bash
 # 这一步会自动创建 .venv 并安装 pyproject.toml 中的依赖
 uv sync
 ```
 
 ### 3. 配置你的秘密武器 (.env)
-复制环境变量模板，填入你的 **OpenAI Key** 和 **Telegram Token**：
+复制环境变量模板，填入你的 **OpenAI Key**（必填）和 **Telegram Token**：
 ```bash
 cp .env.example .env
-# 记得编辑 .env 文件哦！
+# 记得编辑 .env 文件！
 # OPENAI_API_KEY=sk-...
-# TELEGRAM_TOKEN=...
 ```
 
-### 4. 启动引擎
+### 4. 启动服务器
+本项目现在作为一个 API 服务器运行：
 ```bash
 uv run main.py
 ```
-然后，坐等 Telegram 收到消息吧！ (ﾉ>ω<)ﾉ
+启动成功后，你会看到：
+```
+🚀 启动 FastAPI 服务器...
+📡 访问地址: http://localhost:8000
+📋 API 文档: http://localhost:8000/docs
+```
+
+---
+
+## 📡 API 使用指南
+
+服务器启动后，你可以通过以下方式与 Agent 交互：
+
+### 1. 查看 API 文档
+访问 [http://localhost:8000/docs](http://localhost:8000/docs) 查看完整的 Swagger UI 文档。
+
+### 2. 触发分析任务 (Invoke)
+发送一个 **POST** 请求到 `/invoke` 端点来启动分析流程。
+
+**使用 curl:**
+```bash
+curl -X POST http://localhost:8000/invoke
+```
+
+**使用 Python:**
+```python
+import requests
+
+response = requests.post("http://localhost:8000/invoke")
+print(response.json())
+```
 
 ---
 
@@ -102,10 +136,10 @@ uv run main.py
 │   ├── agent.yaml        # 定义 Agent 的人设和背景
 │   └── task.yaml         # 定义具体的任务步骤
 ├── src/                  # ⚙️ 核心代码区
-│   ├── tools/            # 🛠️ 武器库 (yfinance, search tools)
+│   ├── tools/            # 🛠️ 武器库 (finance_tool 已实现)
 │   ├── utils/            # 🧰 杂项 (Telegram notifier)
 │   └── crew.py           # 🎬 导演脚本 (Crew 编排)
-├── main.py               # 🚪 启动入口
+├── main.py               # 🚪 启动入口 (FastAPI Server)
 ├── pyproject.toml        # 📦 依赖管理
 └── README.md             # 📖 你正在看的这本书
 ```
@@ -116,9 +150,11 @@ uv run main.py
 
 - [x] **Phase 1**: 项目初始化 &环境搭建 (uv) ✅
 - [x] **Phase 2**: 定义 Agent 和 Task (YAML 配置) ✅
-- [ ] **Phase 3**: 实现 `finance_tool` (yfinance 对接) 🚧
-- [ ] **Phase 4**: 对接 Telegram Bot API 🚧
-- [ ] **Phase 5**: 躺平赚钱 (Dreaming...) 🛌
+- [x] **Phase 3**: 实现 `finance_tool` (yfinance 对接 & BaseTool 适配) ✅
+- [x] **Phase 4**: 集成 FastAPI 构建 API 服务 ✅
+- [ ] **Phase 5**: 实现 News Researcher Agent 和搜索工具 🚧
+- [ ] **Phase 6**: 对接 Telegram Bot API 🚧
+- [ ] **Phase 7**: 躺平赚钱 (Dreaming...) 🛌
 
 ---
 
