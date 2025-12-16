@@ -1,5 +1,12 @@
-from crewai import Agent, Task, Crew
+import yaml
+from crewai import Agent, Crew
+
 from src.tools.finance_tool import get_nasdaq_data
+
+
+def load_yaml(file_path):
+    with open(file_path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
 
 
 class NasdaqSummaryCrew:
@@ -10,8 +17,9 @@ class NasdaqSummaryCrew:
 
     def market_analyst(self) -> Agent:
         return Agent(
-            config=self.agent_config,
-            tools=[finance_tool],
+            config=self.agent_config["market_analyst"],  # 指向具体的配置项
+            tools=[get_nasdaq_data],
+            verbose=True,
         )
 
     def crew(self) -> Crew:

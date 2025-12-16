@@ -48,6 +48,18 @@ graph TD
 
 ---
 
+## 🛠️ 技术栈 (Tech Stack)
+
+本项目使用以下核心库构建：
+
+- **[CrewAI](https://github.com/joaomdmoura/crewai)**: `^1.7.0` - 多 Agent 协同框架
+- **[LangChain](https://github.com/langchain-ai/langchain)**: `^0.4.1` - 大模型应用开发框架
+- **[FastAPI](https://fastapi.tiangolo.com/)**: `^0.124.4` -要把 Agent 能力暴露为 API 时使用
+- **[yfinance](https://github.com/ranaroussi/yfinance)**: `^0.2.66` - 雅虎财经数据获取
+- **[Ruff](https://docs.astral.sh/ruff/)**: `^0.14.9` (Dev) - 极速 Python 代码在 Linting 和 Formatting 工具
+
+---
+
 ## ⚡ 快速开始 (Quick Start)
 
 我们要使用最酷的 **uv** 包管理器来运行这个项目！速度飞快！🚀
