@@ -4,6 +4,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
 ![CrewAI](https://img.shields.io/badge/Agent-CrewAI-orange?logo=robot)
 ![FastAPI](https://img.shields.io/badge/API-FastAPI-green?logo=fastapi)
+![Tavily](https://img.shields.io/badge/Search-Tavily-blue?logo=google)
 ![Package Manager](https://img.shields.io/badge/Manager-uv-purple?logo=rust)
 
 ## 🌟 项目简介 (What is this?)
@@ -13,8 +14,9 @@
 
 这个 Agent 的目标是解放你的双手：
 1.  **自动盯盘**：捕捉 QQQ（纳指100）当天的涨跌幅。
-2.  **智能搜寻**：分析为什么涨？为什么跌？（是鲍威尔又讲话了？还是英伟达起飞了？）
-3.  **贴心汇报**：最后把一切汇总成一份简短的研报，推送到你的 Telegram。
+2.  **智能搜寻**：自动搜索全网新闻，分析为什么涨？为什么跌？（是鲍威尔又讲话了？还是英伟达起飞了？）
+3.  **专业研报**：由资深财经编辑 Agent 汇总成一份简短的研报。
+4.  **实时流式输出**：通过 SSE (Server-Sent Events) 让你实时看到 AI 的思考过程。
 
 ---
 
@@ -24,19 +26,18 @@
 
 ```mermaid
 graph TD
-    Start[⏰ 每日触发 / API 调用] --> |启动| Crew[👥 CrewAI Manager]
+    Start[⏰ 每日触发 / API 调用] --> |启动| Server[� FastAPI Server]
     
-    subgraph Team [✨ 核心团队]
-        Crew --> |Step 1| Analyst[📊 Market Analyst]
-        Crew --> |Step 2| Researcher[🕵️ News Researcher]
-        Crew --> |Step 3| Writer[✍️ Content Creator]
+    subgraph Team [✨ 核心 Agent 团队]
+        Server --> |Step 1| Analyst[📊 Market Analyst]
+        Analyst --> |Step 2| Researcher[🕵️ News Researcher]
+        Researcher --> |Step 3| Writer[✍️ Content Creator]
     end
 
-    Analyst --> |数据| Writer
-    Researcher --> |新闻| Writer
+    Analyst --> |Tool: yfinance| Data[📈 真实股市数据]
+    Researcher --> |Tool: Tavily| News[🌍 实时全网新闻]
     
-    Writer --> |生成简报| Telegram[✈️ Telegram Bot]
-    Telegram --> |推送| User[😎 User]
+    Writer --> |生成简报| Final[� 最终研报]
 ```
 
 ### 🤖 认识一下团队成员
@@ -44,8 +45,8 @@ graph TD
 | 角色 | 职责 | 技能点 |
 | :--- | :--- | :--- |
 | **📊 Market Analyst** | 负责算数，提取 QQQ 开盘/收盘/成交量 | `Mathematics`, `Data Extraction` (⌐■_■) |
-| **🕵️ News Researcher** | 负责八卦（划掉），负责宏观资讯搜集 | `Search`, `Summarization` 🧐 |
-| **✍️ Content Creator** | 负责文笔，把枯燥的数据变成人话 | `Copywriting`, `Storytelling` 📝 |
+| **🕵️ News Researcher** | 负责全网搜寻，分析市场波动的关键原因 | `Tavily Search`, `Information Retrieval` 🧐 |
+| **✍️ Content Creator** | 负责文笔，把枯燥的数据和碎片新闻整合成人话 | `Copywriting`, `Storytelling` 📝 |
 
 ---
 
@@ -54,11 +55,10 @@ graph TD
 本项目使用以下核心库构建：
 
 - **[CrewAI](https://github.com/joaomdmoura/crewai)**: `^1.7.0` - 多 Agent 协同框架
-- **[LangChain](https://github.com/langchain-ai/langchain)**: `^0.4.1` - 大模型应用开发框架
-- **[FastAPI](https://fastapi.tiangolo.com/)**: `^0.124.4` - 提供 RESTful API 接口
-- **[Uvicorn](https://www.uvicorn.org/)**: `^0.30.0` - 高性能 ASGI 服务器
+- **[FastAPI](https://fastapi.tiangolo.com/)**: `^0.124.4` - 提供 RESTful API 接口 (支持 SSE 流式输出)
+- **[Tavily](https://tavily.com/)**: `^0.7.17` - 专为 AI 打造的搜索引擎
 - **[yfinance](https://github.com/ranaroussi/yfinance)**: `^0.2.66` - 雅虎财经数据获取
-- **[Ruff](https://docs.astral.sh/ruff/)**: `^0.14.9` (Dev) - 极速 Python 代码 Linting 和 Formatting 工具
+- **[Uvicorn](https://www.uvicorn.org/)**: `^0.30.0` - 高性能 ASGI 服务器
 
 > 💡 **Windows 用户注意**：本项目已内置 Windows 信号兼容性修复，解决了 CrewAI 在 Windows 上运行时的 `AttributeError: module 'signal' has no attribute 'SIGHUP'` 问题。
 
@@ -82,15 +82,18 @@ uv sync
 ```
 
 ### 3. 配置你的秘密武器 (.env)
-复制环境变量模板，填入你的 **OpenAI Key**（必填）和 **Telegram Token**：
+复制环境变量模板，填入你的 Key。本项目强烈依赖 **Tavily** 进行搜索，请确保配置。
 ```bash
 cp .env.example .env
-# 记得编辑 .env 文件！
-# OPENAI_API_KEY=sk-...
+```
+编辑 `.env` 文件：
+```ini
+OPENAI_API_KEY=sk-xxxxxx
+TAVILY_API_KEY=tvly-xxxxxx
 ```
 
 ### 4. 启动服务器
-本项目现在作为一个 API 服务器运行：
+本项目作为一个 API 服务器运行：
 ```bash
 uv run main.py
 ```
@@ -103,27 +106,32 @@ uv run main.py
 
 ---
 
-## 📡 API 使用指南
+## 📡 API 使用指南 (流式支持)
 
-服务器启动后，你可以通过以下方式与 Agent 交互：
+### 🚀 触发分析任务 (流式)
 
-### 1. 查看 API 文档
-访问 [http://localhost:8000/docs](http://localhost:8000/docs) 查看完整的 Swagger UI 文档。
+我们强烈推荐使用流式模式，这样你可以看到 Agent 的实时思考过程，而不是干等几十秒。
 
-### 2. 触发分析任务 (Invoke)
-发送一个 **POST** 请求到 `/invoke` 端点来启动分析流程。
-
-**使用 curl:**
+#### 方法 A: 使用测试脚本 (推荐)
+保持 `main.py` 运行，新开一个终端：
 ```bash
-curl -X POST http://localhost:8000/invoke
+uv run test_stream.py
 ```
+你会看到控制台实时打印出：
+> 🤔 我需要先获取 QQQ 的最新价格...
+> 🔧 Output: 最新价: 480.20...
+> 🤔 纳指下跌了，我去搜搜为什么...
+> 🎉 FINAL RESULT: ...
 
-**使用 Python:**
+#### 方法 B: 使用 Python 代码
 ```python
 import requests
 
-response = requests.post("http://localhost:8000/invoke")
-print(response.json())
+url = "http://localhost:8000/invoke"
+with requests.post(url, stream=True) as response:
+    for line in response.iter_lines():
+        if line:
+            print(line.decode('utf-8')) # 这里会打印 SSE 格式的数据
 ```
 
 ---
@@ -134,12 +142,13 @@ print(response.json())
 .
 ├── config/               # 🧠 大脑配置区
 │   ├── agent.yaml        # 定义 Agent 的人设和背景
-│   └── task.yaml         # 定义具体的任务步骤
+│   └── task.yaml         # 定义具体的任务步骤 (包含防死循环限制)
 ├── src/                  # ⚙️ 核心代码区
-│   ├── tools/            # 🛠️ 武器库 (finance_tool 已实现)
-│   ├── utils/            # 🧰 杂项 (Telegram notifier)
-│   └── crew.py           # 🎬 导演脚本 (Crew 编排)
-├── main.py               # 🚪 启动入口 (FastAPI Server)
+│   ├── tools/            # 🛠️ 武器库 (finance_tool, search_tool)
+│   ├── crew.py           # 🎬 导演脚本 (Crew 组装 & 回调逻辑)
+│   └── ...
+├── main.py               # 🚪 启动入口 (FastAPI Server + SSE Streaming)
+├── test_stream.py        # 🧪 流式接口测试脚本
 ├── pyproject.toml        # 📦 依赖管理
 └── README.md             # 📖 你正在看的这本书
 ```
@@ -150,11 +159,12 @@ print(response.json())
 
 - [x] **Phase 1**: 项目初始化 &环境搭建 (uv) ✅
 - [x] **Phase 2**: 定义 Agent 和 Task (YAML 配置) ✅
-- [x] **Phase 3**: 实现 `finance_tool` (yfinance 对接 & BaseTool 适配) ✅
-- [x] **Phase 4**: 集成 FastAPI 构建 API 服务 ✅
-- [ ] **Phase 5**: 实现 News Researcher Agent 和搜索工具 🚧
-- [ ] **Phase 6**: 对接 Telegram Bot API 🚧
-- [ ] **Phase 7**: 躺平赚钱 (Dreaming...) 🛌
+- [x] **Phase 3**: 实现 `finance_tool` (yfinance 对接) ✅
+- [x] **Phase 4**: 实现 `search_tool` (Tavily 对接) ✅
+- [x] **Phase 5**: 集成 FastAPI 并实现 **SSE 流式输出** ✅
+- [x] **Phase 6**: 完成 Market Analyst, News Researcher, Content Creator 全流程 ✅
+- [ ] **Phase 7**: 对接 Telegram Bot API 🚧
+- [ ] **Phase 8**: 躺平赚钱 (Dreaming...) 🛌
 
 ---
 

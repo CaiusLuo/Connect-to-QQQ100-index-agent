@@ -1,5 +1,9 @@
+import json
 import platform
 import signal
+import threading
+from queue import Queue, Empty
+from time import sleep
 
 # Windows 平台兼容性修复：这些是 Unix 专用信号，Windows 上不存在
 if platform.system() == "Windows":
@@ -16,13 +20,8 @@ if platform.system() == "Windows":
     signal.SIGTTIN = signal.SIGTERM  # Background read from tty
     signal.SIGTTOU = signal.SIGTERM  # Background write to tty
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
-from crewai import Crew, Process, Task
 from fastapi import FastAPI
-
+from fastapi.responses import StreamingResponse
 from src.crew import NasdaqSummaryCrew
 
 app = FastAPI(
@@ -50,31 +49,66 @@ def health():
 
 @app.post("/invoke")
 def invoke():
-    """执行纳斯达克分析任务"""
-    result = nasdaq_crew.kickoff()
-    print("============result===========\n", result)
-    return {"status": "success", "result": str(result)}
+    """执行纳斯达克分析任务 (流式响应)"""
+    output_queue = Queue()
 
+    def step_callback(step_output):
+        try:
+            # step_output 可能是 TaskOutput 对象或字典
+            msg = ""
+            if hasattr(step_output, "thought") and step_output.thought:
+                msg = f"🤔 {step_output.thought}"
+            elif hasattr(step_output, "output") and step_output.output:
+                msg = (
+                    f"🔧 Output: {str(step_output.output)[:100]}..."  # 截断一下避免过长
+                )
+            else:
+                msg = str(step_output)
 
-# 实例化自定义的 Crew 类
-nasdaq_crew_instance = NasdaqSummaryCrew()
-market_analyst_agent = nasdaq_crew_instance.market_analyst()
+            output_queue.put({"type": "log", "content": msg})
+        except Exception as e:
+            output_queue.put({"type": "log", "content": f"Step log error: {str(e)}"})
 
-# 定义任务 (临时在main里定义，通常应在crew.py里定义task方法)
-task_config = nasdaq_crew_instance.task_config["fetch_and_analyze_data"]
-get_data_task = Task(
-    description=task_config["description"],
-    expected_output=task_config["expected_output"],
-    agent=market_analyst_agent,
-)
+    def run_crew():
+        import traceback
 
-# 组装 Crew
-nasdaq_crew = Crew(
-    agents=[market_analyst_agent],
-    tasks=[get_data_task],
-    process=Process.sequential,
-    verbose=True,
-)
+        try:
+            output_queue.put({"type": "log", "content": "🚀 任务启动..."})
+
+            crew_instance = NasdaqSummaryCrew().crew(step_callback=step_callback)
+            result = crew_instance.kickoff()
+
+            # 使用 result.raw 如果存在
+            final_content = result.raw if hasattr(result, "raw") else str(result)
+            output_queue.put({"type": "result", "content": final_content})
+
+        except Exception as e:
+            err_msg = f"执行出错: {str(e)}\n{traceback.format_exc()}"
+            output_queue.put({"type": "error", "content": err_msg})
+        finally:
+            output_queue.put(None)
+
+    # 在后台线程中运行 Crew
+    thread = threading.Thread(target=run_crew)
+    thread.start()
+
+    def event_generator():
+        while True:
+            try:
+                # 设置超时防止死循环，也可以让 yield 有机会处理断开连接
+                data = output_queue.get(timeout=1)
+
+                if data is None:
+                    break
+
+                # SSE 格式: data: <json_string>\n\n
+                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+            except Empty:
+                continue
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 if __name__ == "__main__":
     import uvicorn
