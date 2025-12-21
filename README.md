@@ -152,7 +152,7 @@ TAVILY_API_KEY=tvly-xxxxxx
 CREWAI_TRACING_ENABLED=true
 
 # Telegram Bot（可选，用于推送通知）
-TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+TELEGRAM_BOT_TOKEN=xxxxxx
 ```
 
 **获取 API Keys**：
@@ -438,7 +438,18 @@ uv pip install --force-reinstall crewai
 2. 正确设置了 Webhook URL
 3. 防火墙允许 Telegram 服务器访问
 
----
+如果使用 ngrok 进行内网穿透就填充对应的 Info,直接访问下面的网址
+
+```
+https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=<YOUR_NGROK_URL>/webhook
+
+# 返回以下json就是成功绑定对应的暴露端口到tg_bot上面了
+{
+    ok: true,
+    result: true,
+    description: "Webhook was set"
+}
+```
 
 ## 🤝 贡献 (Contributing)
 
