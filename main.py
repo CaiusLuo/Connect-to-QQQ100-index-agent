@@ -20,9 +20,11 @@ if platform.system() == "Windows":
     signal.SIGTTIN = signal.SIGTERM  # Background read from tty
     signal.SIGTTOU = signal.SIGTERM  # Background write to tty
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
+import requests
 from src.crew import NasdaqSummaryCrew
+from src.utils.notifier import run_agent_and_notify, TG_API_URL
 
 app = FastAPI(
     title="纳斯达克100指数分析 API",
@@ -108,6 +110,36 @@ def invoke():
                 continue
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/webhook")
+async def telegram_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    """TG机器人回复(webhook)"""
+    data = await request.json()
+    if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"].get("text", "")
+
+        print("requried text: ", text)
+
+        if text in ["/start_summary"]:
+            initial_msg = {
+                "chat_id": chat_id,
+                "text": "🚀 收到请求！正在调动 AI 智能体分析纳指数据，请稍候...",
+            }
+            response = requests.post(TG_API_URL + "/sendMessage", json=initial_msg)
+            if response.status_code == 200:
+                resp_data = response.json()
+                # 拿回发出的消息ID，用于后续更新进度
+                status_msg_id = resp_data["result"]["message_id"]
+                background_tasks.add_task(run_agent_and_notify, chat_id, status_msg_id)
+            else:
+                print(f"Failed to send initial message: {response.text}")
+        return {"status": "ok"}
+    return {"status": "error"}
 
 
 if __name__ == "__main__":
