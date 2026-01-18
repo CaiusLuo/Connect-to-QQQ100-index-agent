@@ -6,13 +6,14 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 from src.utils.notifier import run_agent_and_notify
 import requests
 from datetime import datetime
+from src.db.tg_user.user_service import UserService
 
 # 从环境变量获取配置
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TG_API_URL = f"https://api.telegram.org/bot{TG_TOKEN}"
 
 # 用户数据文件
-USERS_FILE = "bot_users.json"
+USERS_FILE = UserService.list_subscribed_users()
 
 executors = {
     'default': ThreadPoolExecutor(10)

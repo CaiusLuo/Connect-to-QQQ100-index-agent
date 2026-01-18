@@ -1,5 +1,5 @@
-from src.db.models.tg_user import TgUser
-from src.db.config import get_conn
+from .tg_user import TgUser
+from ..config import get_conn
 
 class TgUserRepo:
 

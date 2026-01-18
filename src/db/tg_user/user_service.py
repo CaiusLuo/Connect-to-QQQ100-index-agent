@@ -1,13 +1,12 @@
-from src.db.models.tg_user import TgUser
-from src.db.repositories.tg_user_repo import TgUserRepo
-import uuid
+from .tg_user import TgUser
+from .tg_user_repo import TgUserRepo
 
 class UserService:
 
     @staticmethod
     def subscribe_user(user_data: dict):
         user = TgUser(
-            tg_user_id = user_data.get["id"],
+            tg_user_id=user_data.get("id"),
             username=user_data.get("username"),
             first_name=user_data.get("first_name"),
             last_name=user_data.get("last_name"),
@@ -19,7 +18,7 @@ class UserService:
     @staticmethod
     def unsubscribe_user(user_data: dict):
         user = TgUser(
-            tg_user_id=user_data.get["id"],
+            tg_user_id=user_data.get("id"),
             is_subscribed=False
         )
         TgUserRepo.upsert(user)
