@@ -25,6 +25,7 @@ from fastapi.responses import StreamingResponse
 import requests
 from src.crew import NasdaqSummaryCrew
 from src.utils.notifier import run_agent_and_notify, TG_API_URL
+from src.utils.scheduler import get_scheduler, user_manager
 
 app = FastAPI(
     title="纳斯达克100指数分析 API",
@@ -40,6 +41,8 @@ def root():
         "message": "🎯 纳斯达克100指数分析 API",
         "docs": "访问 /docs 查看 API 文档",
         "invoke": "POST /invoke 执行分析任务",
+        "webhook": "POST /webhook Telegram Bot 接口",
+        "scheduler": "定时推送功能已启用 (09:00, 20:00)",
     }
 
 
@@ -122,8 +125,13 @@ async def telegram_webhook(
     if "message" in data:
         chat_id = data["message"]["chat"]["id"]
         text = data["message"].get("text", "")
+        username = data["message"]["from"].get("username", "")
+        first_name = data["message"]["from"].get("first_name", "")
 
-        print("requried text: ", text)
+        # 记录所有与 Bot 互动的用户（自动订阅）
+        user_manager.add_or_update_user(chat_id, username, first_name)
+
+        print(f"收到消息: {text} (来自用户: {chat_id})")
 
         if text in ["/start_summary"]:
             initial_msg = {
@@ -138,8 +146,96 @@ async def telegram_webhook(
                 background_tasks.add_task(run_agent_and_notify, chat_id, status_msg_id)
             else:
                 print(f"Failed to send initial message: {response.text}")
+        
+        elif text in ["/unsubscribe", "/取消订阅"]:
+            # 取消订阅定时推送
+            success = user_manager.unsubscribe_user(chat_id)
+            if success:
+                msg = "❌ 已取消订阅定时推送。如需重新订阅，请发送 /subscribe"
+            else:
+                msg = "⚠️ 您还没有订阅过。"
+            
+            requests.post(TG_API_URL + "/sendMessage", json={
+                "chat_id": chat_id,
+                "text": msg
+            })
+        
+        elif text in ["/subscribe", "/订阅"]:
+            # 重新订阅定时推送
+            success = user_manager.subscribe_user(chat_id)
+            msg = "✅ 订阅成功！您将在每日 09:00 和 20:00 收到纳斯达克100指数分析报告。"
+            
+            requests.post(TG_API_URL + "/sendMessage", json={
+                "chat_id": chat_id,
+                "text": msg
+            })
+        
+        elif text in ["/status", "/状态"]:
+            # 查看订阅状态
+            stats = user_manager.get_user_count()
+            user_info = user_manager.users.get(chat_id, {})
+            is_subscribed = user_info.get("subscribed", True)
+            
+            status_msg = f"""
+📊 Bot 状态信息：
+
+👤 您的状态：{"✅ 已订阅" if is_subscribed else "❌ 未订阅"}
+👥 总用户数：{stats['total']}
+📅 订阅用户数：{stats['subscribed']}
+
+⏰ 推送时间：每日 09:00 和 20:00
+            """
+            
+            requests.post(TG_API_URL + "/sendMessage", json={
+                "chat_id": chat_id,
+                "text": status_msg.strip()
+            })
+        
+        elif text in ["/help", "/帮助", "/start"]:
+            # 帮助信息
+            help_msg = f"""
+🤖 纳斯达克100指数分析机器人
+
+👋 欢迎！您已自动订阅定时推送。
+
+📋 可用命令：
+• /start_summary - 立即生成分析报告
+• /unsubscribe 或 /取消订阅 - 取消定时推送
+• /subscribe 或 /订阅 - 重新订阅定时推送
+• /status 或 /状态 - 查看订阅状态
+• /help 或 /帮助 - 显示此帮助信息
+
+⏰ 定时推送时间：
+• 上午 09:00 - 开盘前分析
+• 晚上 20:00 - 盘后分析
+
+💡 所有与机器人互动的用户都会自动订阅定时推送
+            """
+            
+            requests.post(TG_API_URL + "/sendMessage", json={
+                "chat_id": chat_id,
+                "text": help_msg.strip()
+            })
+        
         return {"status": "ok"}
     return {"status": "error"}
+
+
+# 使用新的生命周期事件
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时执行的操作"""
+    print("🚀 启动定时任务调度器...")
+    get_scheduler()  # 启动调度器
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时执行的操作"""
+    scheduler = get_scheduler()
+    if scheduler:
+        scheduler.shutdown()
+        print("⏹️ 定时任务调度器已关闭")
 
 
 if __name__ == "__main__":
