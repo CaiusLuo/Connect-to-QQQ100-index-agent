@@ -25,7 +25,9 @@ from fastapi.responses import StreamingResponse
 import requests
 from src.crew import NasdaqSummaryCrew
 from src.utils.notifier import run_agent_and_notify, TG_API_URL
-from src.utils.scheduler import get_scheduler, user_manager
+from src.utils.scheduler import get_scheduler, get_user_stats
+from src.db.tg_user.user_service import UserService
+from src.utils.auth import check_admin_permission, get_admin_help, is_admin
 
 app = FastAPI(
     title="纳斯达克100指数分析 API",
@@ -125,11 +127,14 @@ async def telegram_webhook(
     if "message" in data:
         chat_id = data["message"]["chat"]["id"]
         text = data["message"].get("text", "")
-        username = data["message"]["from"].get("username", "")
-        first_name = data["message"]["from"].get("first_name", "")
+        user_data = data["message"]["from"]
 
         # 记录所有与 Bot 互动的用户（自动订阅）
-        user_manager.add_or_update_user(chat_id, username, first_name)
+        try:
+            UserService.subscribe_user(user_data)
+            print(f"✅ 用户信息已更新: {chat_id}")
+        except Exception as e:
+            print(f"❌ 更新用户信息失败: {str(e)}")
 
         print(f"收到消息: {text} (来自用户: {chat_id})")
 
@@ -149,11 +154,12 @@ async def telegram_webhook(
         
         elif text in ["/unsubscribe", "/取消订阅"]:
             # 取消订阅定时推送
-            success = user_manager.unsubscribe_user(chat_id)
-            if success:
+            try:
+                UserService.unsubscribe_user(user_data)
                 msg = "❌ 已取消订阅定时推送。如需重新订阅，请发送 /subscribe"
-            else:
-                msg = "⚠️ 您还没有订阅过。"
+            except Exception as e:
+                print(f"❌ 取消订阅失败: {str(e)}")
+                msg = "⚠️ 取消订阅失败，请稍后重试。"
             
             requests.post(TG_API_URL + "/sendMessage", json={
                 "chat_id": chat_id,
@@ -162,8 +168,12 @@ async def telegram_webhook(
         
         elif text in ["/subscribe", "/订阅"]:
             # 重新订阅定时推送
-            success = user_manager.subscribe_user(chat_id)
-            msg = "✅ 订阅成功！您将在每日 09:00 和 20:00 收到纳斯达克100指数分析报告。"
+            try:
+                UserService.subscribe_user(user_data)
+                msg = "✅ 订阅成功！您将在每日 09:00 和 20:00 收到纳斯达克100指数分析报告。"
+            except Exception as e:
+                print(f"❌ 订阅失败: {str(e)}")
+                msg = "⚠️ 订阅失败，请稍后重试。"
             
             requests.post(TG_API_URL + "/sendMessage", json={
                 "chat_id": chat_id,
@@ -171,29 +181,103 @@ async def telegram_webhook(
             })
         
         elif text in ["/status", "/状态"]:
-            # 查看订阅状态
-            stats = user_manager.get_user_count()
-            user_info = user_manager.users.get(chat_id, {})
-            is_subscribed = user_info.get("subscribed", True)
+            # 查看订阅状态 - 仅管理员可用
+            has_permission, error_msg = check_admin_permission(chat_id)
             
-            status_msg = f"""
-📊 Bot 状态信息：
+            if not has_permission:
+                requests.post(TG_API_URL + "/sendMessage", json={
+                    "chat_id": chat_id,
+                    "text": error_msg
+                })
+                return {"status": "ok"}
+            
+            try:
+                stats = get_user_stats()
+                
+                # 管理员详细状态信息
+                status_msg = f"""
+🛡️ 系统管理面板
 
-👤 您的状态：{"✅ 已订阅" if is_subscribed else "❌ 未订阅"}
-👥 总用户数：{stats['total']}
-📅 订阅用户数：{stats['subscribed']}
+📊 用户统计：
+• 订阅用户数：{stats['subscribed_count']}
+• 活跃用户：{len([u for u in stats['users'] if u])}
 
-⏰ 推送时间：每日 09:00 和 20:00
-            """
+⏰ 定时任务：
+• 推送时间：每日 09:00 和 20:00
+• 状态：运行中 ✅
+
+💾 数据存储：
+• 类型：PostgreSQL 数据库
+• 状态：连接正常 ✅
+
+🤖 Bot 信息：
+• 管理员ID：{chat_id}
+• 权限：完全访问 🔓
+
+📋 最近订阅用户：
+{chr(10).join([f"• {u[1] or u[2] or 'Unknown'} ({u[0]})" for u in stats['users'][:5]])}
+                """
+                
+                if stats['subscribed_count'] > 5:
+                    status_msg += f"\n... 还有 {stats['subscribed_count'] - 5} 个用户"
+                    
+            except Exception as e:
+                print(f"❌ 获取状态失败: {str(e)}")
+                status_msg = f"⚠️ 获取系统状态失败：{str(e)}"
             
             requests.post(TG_API_URL + "/sendMessage", json={
                 "chat_id": chat_id,
                 "text": status_msg.strip()
             })
         
+        elif text in ["/admin_help", "/管理员帮助"]:
+            # 管理员帮助 - 仅管理员可用
+            has_permission, error_msg = check_admin_permission(chat_id)
+            
+            if not has_permission:
+                requests.post(TG_API_URL + "/sendMessage", json={
+                    "chat_id": chat_id,
+                    "text": error_msg
+                })
+                return {"status": "ok"}
+            
+            help_msg = get_admin_help()
+            
+            requests.post(TG_API_URL + "/sendMessage", json={
+                "chat_id": chat_id,
+                "text": help_msg.strip()
+            })
+        
         elif text in ["/help", "/帮助", "/start"]:
-            # 帮助信息
-            help_msg = f"""
+            # 帮助信息 - 根据用户权限显示不同内容
+            if is_admin(chat_id):
+                # 管理员帮助信息
+                help_msg = f"""
+🤖 纳斯达克100指数分析机器人 (管理员模式)
+
+👋 欢迎管理员！您拥有完全访问权限。
+
+📋 普通命令：
+• /start_summary - 立即生成分析报告
+• /unsubscribe 或 /取消订阅 - 取消定时推送
+• /subscribe 或 /订阅 - 重新订阅定时推送
+• /help 或 /帮助 - 显示此帮助信息
+
+🛡️ 管理员专用命令：
+• /status 或 /状态 - 查看系统状态和用户统计
+• /admin_help - 显示管理员详细帮助
+
+⏰ 定时推送时间：
+• 上午 09:00 - 开盘前分析
+• 晚上 20:00 - 盘后分析
+
+💡 所有与机器人互动的用户都会自动订阅定时推送
+💾 用户数据安全存储在数据库中
+🔐 您当前以管理员身份登录
+                """
+            else:
+                # 普通用户帮助信息
+                help_msg = f"""
 🤖 纳斯达克100指数分析机器人
 
 👋 欢迎！您已自动订阅定时推送。
@@ -202,7 +286,6 @@ async def telegram_webhook(
 • /start_summary - 立即生成分析报告
 • /unsubscribe 或 /取消订阅 - 取消定时推送
 • /subscribe 或 /订阅 - 重新订阅定时推送
-• /status 或 /状态 - 查看订阅状态
 • /help 或 /帮助 - 显示此帮助信息
 
 ⏰ 定时推送时间：
@@ -210,7 +293,8 @@ async def telegram_webhook(
 • 晚上 20:00 - 盘后分析
 
 💡 所有与机器人互动的用户都会自动订阅定时推送
-            """
+💾 用户数据安全存储在数据库中
+                """
             
             requests.post(TG_API_URL + "/sendMessage", json={
                 "chat_id": chat_id,

@@ -370,7 +370,7 @@ def crew(self, step_callback=None) -> Crew:
 - [x] **Phase 8**: 修复任务 Context 传递问题（Task 依赖关系） ✅
 - [x] **Phase 9**: 优化 Agent 配置（禁用 Memory，强化指令） ✅
 - [x] **Phase 10**: Windows 平台兼容性修复 ✅
-- [ ] **Phase 11**: 添加定时任务（每日自动分析） 🚧
+- [x] **Phase 11**: 添加定时任务（每日自动分析） 🚧
 - [ ] **Phase 12**: 支持更多指数（SPY, DIA, IWM） 🚧
 - [ ] **Phase 13**: 添加历史数据分析和趋势预测 🚧
 - [ ] **Phase 14**: 优化报告格式和可视化 🚧
